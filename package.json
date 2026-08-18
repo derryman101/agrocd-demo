@@ -1,0 +1,9 @@
+{
+  "name": "agrocd-demo",
+  "version": "1.0.0",
+  "description": "Demo application for learning Argo CD",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  }
+}

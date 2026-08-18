@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: agrocd-demo
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: agrocd-demo
+
+  template:
+    metadata:
+      labels:
+        app: agrocd-demo
+
+    spec:
+      containers:
+        - name: agrocd-demo
+          image: agrocd-demo:1.1.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 3001
