@@ -48,3 +48,22 @@ jobs:
       - name: Push Docker image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: docker push ghcr.io/derryman101/agrocd-demo:${{ github.sha }}
+
+      - name: Update GitOps repository
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          git clone https://x-access-token:${GITOPS_TOKEN}@github.com/derryman101/agrocd-demo-gitops.git gitops
+
+          cd gitops
+
+          sed -i 's|image: .*|image: ghcr.io/derryman101/agrocd-demo:'"${IMAGE_TAG}"'|' apps/agrocd-demo/deployment.yaml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add apps/agrocd-demo/deployment.yaml
+          git commit -m "chore: update agrocd-demo image to ${IMAGE_TAG}"
+          git push origin main
