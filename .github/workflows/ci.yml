@@ -61,6 +61,11 @@ jobs:
 
           sed -i 's|image: .*|image: ghcr.io/derryman101/agrocd-demo:'"${IMAGE_TAG}"'|' apps/agrocd-demo/deployment.yaml
 
+          sed -i '/imagePullPolicy:/a\
+                    env:\
+                      - name: GIT_SHA\
+                        value: "'"${IMAGE_TAG}"'"' apps/agrocd-demo/deployment.yaml
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
