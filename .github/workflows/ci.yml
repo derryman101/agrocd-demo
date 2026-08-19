@@ -35,7 +35,10 @@ jobs:
         run: npm test
 
       - name: Build Docker image
-        run: docker build -t ghcr.io/derryman101/agrocd-demo:${{ github.sha }} .
+        run: |
+          docker build \
+            -t ghcr.io/derryman101/agrocd-demo:${{ github.sha }} \
+            .
 
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -47,7 +50,8 @@ jobs:
 
       - name: Push Docker image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: docker push ghcr.io/derryman101/agrocd-demo:${{ github.sha }}
+        run: |
+          docker push ghcr.io/derryman101/agrocd-demo:${{ github.sha }}
 
       - name: Update GitOps repository
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -59,16 +63,47 @@ jobs:
 
           cd gitops
 
-          sed -i 's|image: .*|image: ghcr.io/derryman101/agrocd-demo:'"${IMAGE_TAG}"'|' apps/agrocd-demo/deployment.yaml
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
 
-          sed -i '/imagePullPolicy:/a\
-                    env:\
-                      - name: GIT_SHA\
-                        value: "'"${IMAGE_TAG}"'"' apps/agrocd-demo/deployment.yaml
+          path = Path("apps/agrocd-demo/deployment.yaml")
+          text = path.read_text()
+
+          image = f"ghcr.io/derryman101/agrocd-demo:{os.environ['IMAGE_TAG']}"
+
+          text = re.sub(
+              r'(\s+image:\s*)\S+',
+              rf'\1{image}',
+              text,
+              count=1
+          )
+
+          if "name: GIT_SHA" in text:
+              text = re.sub(
+                  r'(\s+- name: GIT_SHA\s+value:\s*)\S+',
+                  rf'\1{os.environ["IMAGE_TAG"]}',
+                  text,
+                  count=1
+              )
+          else:
+              text = re.sub(
+                  r'(\s+imagePullPolicy:.*\n)',
+                  rf'\1          env:\n            - name: GIT_SHA\n              value: "{os.environ["IMAGE_TAG"]}"\n',
+                  text,
+                  count=1
+              )
+
+          path.write_text(text)
+          PY
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add apps/agrocd-demo/deployment.yaml
-          git commit -m "chore: update agrocd-demo image to ${IMAGE_TAG}"
+
+          git diff --cached --quiet || \
+            git commit -m "chore: update agrocd-demo image to ${IMAGE_TAG}"
+
           git push origin main
