@@ -8,7 +8,8 @@ const app = http.createServer((req, res) => {
 
     res.end(
       JSON.stringify({
-        status: "ok"
+        status: "ok",
+        version: "1.2.0"
       })
     );
 
@@ -28,4 +29,3 @@ const app = http.createServer((req, res) => {
 });
 
 module.exports = app;
-
