@@ -19,27 +19,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ----------------------------------------
+      # Checkout application
+      # ----------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ----------------------------------------
+      # Node.js
+      # ----------------------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
+      # ----------------------------------------
+      # Install dependencies
+      # ----------------------------------------
       - name: Install dependencies
         run: npm ci
 
+      # ----------------------------------------
+      # Tests
+      # ----------------------------------------
       - name: Run tests
         run: npm test
 
+      # ----------------------------------------
+      # Docker build
+      # ----------------------------------------
       - name: Build Docker image
         run: |
           docker build \
             -t ghcr.io/derryman101/agrocd-demo:${{ github.sha }} \
             .
 
+      # ----------------------------------------
+      # GHCR login
+      # ----------------------------------------
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
@@ -48,62 +66,103 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ----------------------------------------
+      # Push image to GHCR
+      # ----------------------------------------
       - name: Push Docker image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           docker push ghcr.io/derryman101/agrocd-demo:${{ github.sha }}
 
+      # ----------------------------------------
+      # Update GitOps repository
+      # ----------------------------------------
       - name: Update GitOps repository
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GITOPS_TOKEN: ${{ secrets.GITOPS_TOKEN }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          git clone https://x-access-token:${GITOPS_TOKEN}@github.com/derryman101/agrocd-demo-gitops.git gitops
+          git clone \
+            https://x-access-token:${GITOPS_TOKEN}@github.com/derryman101/agrocd-demo-gitops.git \
+            gitops
 
           cd gitops
 
           python3 - <<'PY'
           from pathlib import Path
           import os
-          import re
 
           path = Path("apps/agrocd-demo/deployment.yaml")
+
           text = path.read_text()
+          lines = text.splitlines()
 
-          image = f"ghcr.io/derryman101/agrocd-demo:{os.environ['IMAGE_TAG']}"
+          sha = os.environ["IMAGE_TAG"]
+          image = f"ghcr.io/derryman101/agrocd-demo:{sha}"
 
-          text = re.sub(
-              r'(\s+image:\s*)\S+',
-              rf'\1{image}',
-              text,
-              count=1
-          )
+          # ----------------------------------------
+          # Update container image
+          # ----------------------------------------
 
-          if "name: GIT_SHA" in text:
-              text = re.sub(
-                  r'(\s+- name: GIT_SHA\s+value:\s*)\S+',
-                  rf'\1{os.environ["IMAGE_TAG"]}',
-                  text,
-                  count=1
-              )
-          else:
-              text = re.sub(
-                  r'(\s+imagePullPolicy:.*\n)',
-                  rf'\1          env:\n            - name: GIT_SHA\n              value: "{os.environ["IMAGE_TAG"]}"\n',
-                  text,
-                  count=1
-              )
+          for i, line in enumerate(lines):
+              if line.strip().startswith("image:"):
+                  indent = line[:len(line) - len(line.lstrip())]
+                  lines[i] = f"{indent}image: {image}"
+                  break
 
-          path.write_text(text)
+          # ----------------------------------------
+          # Update existing GIT_SHA
+          # ----------------------------------------
+
+          git_sha_found = False
+
+          for i, line in enumerate(lines):
+              if line.strip() == "- name: GIT_SHA":
+                  git_sha_found = True
+
+                  if i + 1 < len(lines):
+                      next_line = lines[i + 1]
+
+                      if next_line.strip().startswith("value:"):
+                          indent = next_line[:len(next_line) - len(next_line.lstrip())]
+                          lines[i + 1] = f'{indent}value: "{sha}"'
+
+                  break
+
+          # ----------------------------------------
+          # Add GIT_SHA if it doesn't exist
+          # ----------------------------------------
+
+          if not git_sha_found:
+              for i, line in enumerate(lines):
+                  if line.strip().startswith("imagePullPolicy:"):
+                      lines[i + 1:i + 1] = [
+                          "          env:",
+                          "            - name: GIT_SHA",
+                          f'              value: "{sha}"'
+                      ]
+                      break
+
+          path.write_text("\n".join(lines) + "\n")
           PY
+
+          # ----------------------------------------
+          # Git identity
+          # ----------------------------------------
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          # ----------------------------------------
+          # Commit GitOps change
+          # ----------------------------------------
+
           git add apps/agrocd-demo/deployment.yaml
 
-          git diff --cached --quiet || \
+          if ! git diff --cached --quiet; then
             git commit -m "chore: update agrocd-demo image to ${IMAGE_TAG}"
-
-          git push origin main
+            git push origin main
+          else
+            echo "No GitOps changes detected."
+          fi
