@@ -9,6 +9,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   ci:
     name: Test and Build
@@ -31,4 +35,16 @@ jobs:
         run: npm test
 
       - name: Build Docker image
-        run: docker build -t agrocd-demo:${{ github.sha }} .
+        run: docker build -t ghcr.io/derryman101/agrocd-demo:${{ github.sha }} .
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker push ghcr.io/derryman101/agrocd-demo:${{ github.sha }}
