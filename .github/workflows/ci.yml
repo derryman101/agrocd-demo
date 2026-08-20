@@ -105,14 +105,39 @@ jobs:
           # Update container image
           # ----------------------------------------
 
+          image_found = False
+
           for i, line in enumerate(lines):
               if line.strip().startswith("image:"):
                   indent = line[:len(line) - len(line.lstrip())]
                   lines[i] = f"{indent}image: {image}"
+                  image_found = True
+                  break
+
+          if not image_found:
+              raise SystemExit("ERROR: container image field not found")
+
+          # ----------------------------------------
+          # Update APP_ENV
+          # ----------------------------------------
+
+          app_env_found = False
+
+          for i, line in enumerate(lines):
+              if line.strip() == "- name: APP_ENV":
+                  app_env_found = True
+
+                  if i + 1 < len(lines):
+                      next_line = lines[i + 1]
+
+                      if next_line.strip().startswith("value:"):
+                          indent = next_line[:len(next_line) - len(next_line.lstrip())]
+                          lines[i + 1] = f'{indent}value: "Kubernetes"'
+
                   break
 
           # ----------------------------------------
-          # Update existing GIT_SHA
+          # Update GIT_SHA
           # ----------------------------------------
 
           git_sha_found = False
@@ -131,21 +156,46 @@ jobs:
                   break
 
           # ----------------------------------------
-          # Add GIT_SHA if it doesn't exist
+          # Add APP_ENV and GIT_SHA if missing
           # ----------------------------------------
 
-          if not git_sha_found:
+          if not app_env_found or not git_sha_found:
               for i, line in enumerate(lines):
                   if line.strip().startswith("imagePullPolicy:"):
-                      lines[i + 1:i + 1] = [
-                          "          env:",
-                          "            - name: GIT_SHA",
-                          f'              value: "{sha}"'
+                      indent = line[:len(line) - len(line.lstrip())]
+
+                      env_lines = [
+                          f"{indent}env:"
                       ]
+
+                      if not app_env_found:
+                          env_lines.extend([
+                              f"{indent}  - name: APP_ENV",
+                              f'{indent}    value: "Kubernetes"',
+                          ])
+
+                      if not git_sha_found:
+                          env_lines.extend([
+                              f"{indent}  - name: GIT_SHA",
+                              f'{indent}    value: "{sha}"',
+                          ])
+
+                      lines[i + 1:i + 1] = env_lines
                       break
+              else:
+                  raise SystemExit(
+                      "ERROR: imagePullPolicy not found; cannot add environment variables"
+                  )
 
           path.write_text("\n".join(lines) + "\n")
           PY
+
+          # ----------------------------------------
+          # Show generated change
+          # ----------------------------------------
+
+          echo "Generated GitOps changes:"
+          git diff -- apps/agrocd-demo/deployment.yaml
 
           # ----------------------------------------
           # Git identity
