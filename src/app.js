@@ -145,7 +145,7 @@ const html = `
 <body>
   <header class="header">
     <div class="header-content">
-      <h1>🌱 AgroCD Demo</h1>
+      <h1>🌱 AgroCD Demo derryboy </h1>
       <p>CI/CD + GitOps learning application</p>
     </div>
   </header>

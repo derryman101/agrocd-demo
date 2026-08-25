@@ -2,3 +2,21 @@ node_modules/
 .env
 .DS_Store
 npm-debug.log*
+
+# Terraform generated files
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+**/crash.*.log
+
+# Terraform state
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+**/crash.*.log
+
+# Terraform plans
+**/*.tfplan
+**/plan.txt
+**/plan-*.txt
